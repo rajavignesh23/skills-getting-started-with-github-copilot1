@@ -10,8 +10,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const response = await fetch("/activities");
       const activities = await response.json();
 
-      // Clear loading message
+      // Clear loading message and existing options
       activitiesList.innerHTML = "";
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -22,7 +23,22 @@ document.addEventListener("DOMContentLoaded", () => {
         const participants = details.participants || [];
         const participantsMarkup = participants.length
           ? `<ul class="participants-list">${participants
-              .map((email) => `<li>${email}</li>`)
+              .map(
+                (email) => `
+                  <li class="participant-item">
+                    <span class="participant-email">${email}</span>
+                    <button
+                      type="button"
+                      class="delete-btn"
+                      data-activity="${name}"
+                      data-email="${email}"
+                      aria-label="Remove ${email} from ${name}"
+                    >
+                      ✕
+                    </button>
+                  </li>
+                `
+              )
               .join("")}</ul>`
           : `<p class="no-participants">No participants yet.</p>`;
 
@@ -44,6 +60,39 @@ document.addEventListener("DOMContentLoaded", () => {
         option.value = name;
         option.textContent = name;
         activitySelect.appendChild(option);
+      });
+
+      document.querySelectorAll(".delete-btn").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const activity = button.dataset.activity;
+          const email = button.dataset.email;
+
+          try {
+            const response = await fetch(
+              `/activities/${encodeURIComponent(activity)}/unregister?email=${encodeURIComponent(email)}`,
+              {
+                method: "DELETE",
+              }
+            );
+
+            const result = await response.json();
+            if (!response.ok) {
+              throw new Error(result.detail || "Could not unregister participant");
+            }
+
+            messageDiv.textContent = result.message;
+            messageDiv.className = "success";
+            messageDiv.classList.remove("hidden");
+            setTimeout(() => messageDiv.classList.add("hidden"), 5000);
+
+            fetchActivities();
+          } catch (error) {
+            messageDiv.textContent = error.message || "Failed to unregister participant.";
+            messageDiv.className = "error";
+            messageDiv.classList.remove("hidden");
+            setTimeout(() => messageDiv.classList.add("hidden"), 5000);
+          }
+        });
       });
     } catch (error) {
       activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
@@ -72,6 +121,7 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        await fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
